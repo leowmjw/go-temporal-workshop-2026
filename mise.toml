@@ -1,0 +1,43 @@
+min_version = "2026.11.0"
+
+[tools]
+go = "1.27"
+overmind = "latest"
+temporal = "latest"
+
+[env]
+TEMPORAL_ADDRESS = "127.0.0.1:7233"
+TEMPORAL_NAMESPACE = "default"
+TEMPORAL_TASK_QUEUE = "workshop-main"
+WORKSHOP_HTTP_ADDR = "127.0.0.1:8080"
+WORKSHOP_DATA_DIR = "{{config_root}}/.data"
+
+[tasks.setup]
+run = "mkdir -p .data && go mod download"
+
+[tasks.fmt]
+run = "gofmt -w . && go fix ./..."
+
+[tasks.test]
+run = "go test -race -count=1 ./..."
+
+[tasks.test-timing]
+run = "go test -race -count=20 ./internal/workshop"
+
+[tasks.build]
+run = "go build ./..."
+
+[tasks.server]
+run = "go run ./cmd/server"
+
+[tasks.worker]
+run = "go run ./cmd/worker"
+
+[tasks.dev]
+run = "mkdir -p .data && overmind start -f Procfile"
+
+[tasks.e2e]
+run = "bash scripts/e2e.sh"
+
+[tasks.temporal]
+run = "temporal server start-dev --namespace default --db-filename .data/temporal.db"
