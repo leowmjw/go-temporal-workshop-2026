@@ -28,9 +28,18 @@ go.work.sum
 
 # env file
 .env
+.envrc*
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# Ignore mise
+mise.local.toml
+
+# Ignore data + binary
 .data/
 bin/
+
+# Ignore CommandCode
+.commandcode/

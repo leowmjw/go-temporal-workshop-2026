@@ -9,11 +9,15 @@ temporal = "latest"
 TEMPORAL_ADDRESS = "127.0.0.1:7233"
 TEMPORAL_NAMESPACE = "default"
 TEMPORAL_TASK_QUEUE = "workshop-main"
-WORKSHOP_HTTP_ADDR = "127.0.0.1:8080"
+WORKSHOP_HTTP_ADDR = "0.0.0.0:8080"
 WORKSHOP_DATA_DIR = "{{config_root}}/.data"
 
 [tasks.setup]
 run = "mkdir -p .data && go mod download"
+
+[tasks.setup-nexus]
+description = "Create team-a/team-b namespaces and register the workshop-user-directory Nexus endpoint"
+run = "bash scripts/setup-nexus.sh"
 
 [tasks.fmt]
 run = "gofmt -w . && go fix ./..."
@@ -34,10 +38,11 @@ run = "go run ./cmd/server"
 run = "go run ./cmd/worker"
 
 [tasks.dev]
-run = "mkdir -p .data && overmind start -f Procfile"
+description = "Start Temporal, wire Nexus namespaces, then start worker + UI"
+run = "bash scripts/dev.sh"
 
 [tasks.e2e]
 run = "bash scripts/e2e.sh"
 
 [tasks.temporal]
-run = "temporal server start-dev --namespace default --db-filename .data/temporal.db"
+run = "temporal server start-dev --ip 0.0.0.0 --namespace default --db-filename .data/temporal.db"
