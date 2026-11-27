@@ -66,6 +66,7 @@ func appendTeamWorkers(workers []worker.Worker, address string) []worker.Worker 
 
 	wb := worker.New(teamB, workshop.TeamBTaskQueue, worker.Options{})
 	wb.RegisterWorkflow(workshop.UserWorkflow)
+	wb.RegisterWorkflow(workshop.CreditReviewWorkflow)
 	service, err := workshop.NewUserDirectoryService()
 	if err != nil {
 		slog.Error("build Nexus service", "error", err)

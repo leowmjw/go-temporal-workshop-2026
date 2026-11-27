@@ -139,3 +139,28 @@ func TestPaymentWorkflowRejectsNonPositiveAmount(t *testing.T) {
 	env.ExecuteWorkflow(PaymentWorkflow, PaymentRequest{UserID: "u-1", Amount: 0})
 	require.ErrorContains(t, env.GetWorkflowError(), "amount must be positive")
 }
+
+func TestCreditReviewWorkflowApprovesWithinLimit(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.ExecuteWorkflow(CreditReviewWorkflow, CreditReviewRequest{UserID: "u-1", Amount: CreditLimit})
+	require.NoError(t, env.GetWorkflowError())
+	var review CreditReviewResult
+	require.NoError(t, env.GetWorkflowResult(&review))
+	require.Equal(t, "approved", review.Decision)
+	require.Len(t, review.Stages, 4)
+	require.NotEmpty(t, review.ReviewedBy)
+}
+
+func TestCreditReviewWorkflowDeclinesOverLimit(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.ExecuteWorkflow(CreditReviewWorkflow, CreditReviewRequest{UserID: "u-1", Amount: CreditLimit + 1})
+	require.NoError(t, env.GetWorkflowError())
+	var review CreditReviewResult
+	require.NoError(t, env.GetWorkflowResult(&review))
+	require.Equal(t, "declined", review.Decision)
+	require.Contains(t, review.Reason, "credit limit")
+}

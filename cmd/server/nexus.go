@@ -127,20 +127,21 @@ ol.trace li{margin:.3rem 0}
 <div class="panel" data-show="$role==='teama'">
 <h2>TeamA · namespace <code>`+workshop.TeamANamespace+`</code></h2>
 <p class="owns">Owns workflow: <strong>PAYMENT</strong> (<code>PaymentWorkflow</code> on task queue <code>`+workshop.TeamATaskQueue+`</code>)</p>
-<p>TeamA must not touch TeamB's database. It calls the typed operation <code>`+workshop.NexusServiceName+`/`+workshop.NexusGetUserOp+`</code> through endpoint <code>`+workshop.NexusEndpointName+`</code> and Temporal routes it to TeamB's namespace.</p>
+<p>TeamA must not touch TeamB's database. It makes two typed calls through endpoint <code>`+workshop.NexusEndpointName+`</code>: a quick <code>`+workshop.NexusGetUserOp+`</code> lookup, then <code>`+workshop.NexusReviewCreditOp+`</code> — a <em>durable promise</em>: TeamB runs a real multi-stage review workflow and TeamA simply awaits the verdict, even if TeamB restarts mid-review.</p>
 <p>
 <label>user <input data-bind:userid size="8"></label>
 <label>credits <input data-bind:amount type="number" size="5" min="1"></label>
 <button data-attr:disabled="$wired!==true" data-on:click="@post('/api/nexus/payment')">Charge user over Nexus</button>
 </p>
+<p class="muted">TeamB's workshop credit limit is `+"250"+` — charge more than that to watch the promise come back <strong>declined</strong>. The review takes a few seconds; switch to the TeamB tab to see it run.</p>
 <p class="muted" data-show="$wired!==true">The button unlocks once the wiring check above passes.</p>
 <div id="receipt"></div>
 </div>
 
 <div class="panel" data-show="$role==='teamb'">
 <h2>TeamB · namespace <code>`+workshop.TeamBNamespace+`</code></h2>
-<p class="owns">Owns workflow: <strong>USER</strong> (<code>UserWorkflow</code> on task queue <code>`+workshop.TeamBTaskQueue+`</code>)</p>
-<p class="owns">Serves Nexus service <code>`+workshop.NexusServiceName+`</code> · operation <code>`+workshop.NexusGetUserOp+`</code> → starts <code>UserWorkflow</code></p>
+<p class="owns">Owns workflows: <strong>USER</strong> (<code>UserWorkflow</code>) and <strong>CREDIT&nbsp;REVIEW</strong> (<code>CreditReviewWorkflow</code>) on task queue <code>`+workshop.TeamBTaskQueue+`</code></p>
+<p class="owns">Serves Nexus service <code>`+workshop.NexusServiceName+`</code> · <code>`+workshop.NexusGetUserOp+`</code> → <code>UserWorkflow</code> (quick lookup) · <code>`+workshop.NexusReviewCreditOp+`</code> → <code>CreditReviewWorkflow</code> (long-running review, queryable stage, idempotent run ID)</p>
 <p>TeamB never exposes its database or internals — only this service contract. Every call from TeamA appears below within a few seconds (polling):</p>
 <div data-on-interval__duration.3s="@get('/api/nexus/teamb/runs')">
 <div id="teamb-runs"><p class="muted">no handler runs seen yet</p></div>
@@ -179,7 +180,7 @@ func (s *server) nexusPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request := workshop.PaymentRequest{UserID: "u-101", Amount: 42}
-	if isDatastar(r) {
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		var signals struct {
 			UserID string `json:"userid"`
 			Amount any    `json:"amount"`
@@ -225,7 +226,11 @@ func (s *server) nexusPayment(w http.ResponseWriter, r *http.Request) {
 		for _, step := range receipt.Trace {
 			lines.WriteString(`<li>` + html.EscapeString(step) + `</li>`)
 		}
-		_ = sse.PatchElements(`<div id="receipt" class="panel wired"><h3>Receipt · ` + html.EscapeString(receipt.PaymentID) + `</h3><p>Charged <strong>` + strconv.Itoa(receipt.Amount) + `</strong> credits to <code>` + html.EscapeString(receipt.UserID) + `</code> — status ` + receipt.Status + `</p><ol class="trace">` + lines.String() + `</ol><p class="muted">Steps 2–3 crossed the namespace boundary through Nexus; TeamA never dialed TeamB directly.</p></div>`)
+		cardClass, headline := "wired", "Charged"
+		if receipt.Status != "charged" {
+			cardClass, headline = "notwired", "Declined"
+		}
+		_ = sse.PatchElements(`<div id="receipt" class="panel ` + cardClass + `"><h3>Receipt · ` + html.EscapeString(receipt.PaymentID) + `</h3><p>` + headline + ` <strong>` + strconv.Itoa(receipt.Amount) + `</strong> credits · user <code>` + html.EscapeString(receipt.UserID) + `</code> — status ` + receipt.Status + `</p><ol class="trace">` + lines.String() + `</ol><p class="muted">The lookup and the multi-second credit review both crossed the namespace boundary through Nexus; TeamA never dialed TeamB directly.</p></div>`)
 		return
 	}
 	writeJSON(w, http.StatusOK, receipt)
@@ -249,8 +254,8 @@ func (s *server) nexusTeamBRuns(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := teamB.ListWorkflow(r.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: workshop.TeamBNamespace,
-		PageSize:  6,
-		Query:     "WorkflowType = 'UserWorkflow'",
+		PageSize:  8,
+		Query:     "WorkflowType IN ('UserWorkflow', 'CreditReviewWorkflow')",
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})

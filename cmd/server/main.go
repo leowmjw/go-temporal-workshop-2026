@@ -124,9 +124,9 @@ func (s *server) scenario(w http.ResponseWriter, r *http.Request) {
 // a `forge` signal so the same shape arrives from the SSE stream and from
 // lifecycle control responses.
 func standalonePage(title, status, intro string) string {
-	options := ""
+	var options strings.Builder
 	for _, quote := range workshop.Quotes {
-		options += `<option value="` + strconv.Itoa(quote.ID) + `">` + html.EscapeString(quote.Text) + ` — ` + html.EscapeString(quote.Author) + `</option>`
+		options.WriteString(`<option value="` + strconv.Itoa(quote.ID) + `">` + html.EscapeString(quote.Text) + ` — ` + html.EscapeString(quote.Author) + `</option>`)
 	}
 	seed := `{"quoteId":1,"activityId":"","status":"IDLE","forge":{"quoteId":1,"status":"IDLE","running":false,"attempt":0,"heartbeats":0,"step":0,"steps":16,"stage":"","activityId":"","quote":null,"error":""}}`
 
@@ -153,7 +153,7 @@ func standalonePage(title, status, intro string) string {
 <h1>` + title + `</h1><p><strong>` + status + `</strong></p><p>` + intro + `</p>
 <div class="panel" data-signals="` + html.EscapeString(seed) + `">
  <label class="k" for="quote">Pick a quote</label><br>
- <select id="quote" data-bind="quoteId">` + options + `</select>
+ <select id="quote" data-bind="quoteId">` + options.String() + `</select>
  <button data-on:click="@get('/api/forge/watch?quoteId=' + $quoteId)">Forge it</button>
  <p class="k">The calculator starts a durable activity. Every step is a heartbeat, so pause, cancel, and terminate are real Temporal RPCs — not UI state.</p>
 </div>
